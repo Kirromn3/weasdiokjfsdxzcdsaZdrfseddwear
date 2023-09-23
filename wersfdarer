@@ -1,0 +1,943 @@
+if not LPH_OBFUSCATED then
+    LPH_JIT_MAX = LPH_JIT_MAX or function(...) return ... end
+    LPH_NO_VIRTUALIZE = LPH_NO_VIRTUALIZE or function(...) return ... end
+end
+
+--variables--------------------------------
+local UILibrary = {}
+local Toggles = {}
+local Buttons = {}
+local Sliders = {}
+local KeyBinds = {}
+local TextBoxes = {}
+
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService('UserInputService')
+
+if not config then
+    getgenv().config = {}
+end
+
+--Preset-----------------------------------
+
+local Preset = {
+    Colors = {
+        FrameStart = Color3.fromRGB(125, 70, 150),
+        FrameEnd = Color3.fromRGB(25, 25, 100),
+        White = Color3.fromRGB(255, 255, 255),
+        Gray = Color3.fromRGB(150, 150, 150),
+        Black = Color3.fromRGB(0, 0, 0),
+        Fill = Color3.fromRGB(150, 100, 250),
+    },
+    Fonts = {
+        Text = Font.new("rbxasset://fonts/families/Ubuntu.json", Enum.FontWeight.Bold),
+    },
+    Images = {
+        Button = 'rbxassetid://11243256070',
+    }
+}
+
+--ScreenUI---------------------------------
+
+local ScreenUI = Instance.new("ScreenGui")
+ScreenUI.Name = 'ProjectUI-'..math.random(0, 9)..math.random(0, 9)..math.random(0, 9)
+ScreenUI.Parent = game:WaitForChild('CoreGui')
+UILibrary['ScreenUI'] = ScreenUI
+
+--functions--------------------------------
+
+MakeTween = LPH_NO_VIRTUALIZE(function(UI, Time, Properties, noCoroutine)
+    if not noCoroutine then
+        coroutine.wrap(function()
+            TweenService:Create(
+                UI, 
+                TweenInfo.new(Time, Enum.EasingStyle.Quint), 
+                Properties
+            ):Play()
+        end)()
+    else
+        TweenService:Create(
+            UI, 
+            TweenInfo.new(Time, Enum.EasingStyle.Quint), 
+            Properties
+        ):Play()
+    end
+end)
+
+draggable = LPH_NO_VIRTUALIZE(function(frame)
+    local dragging = false
+    local MouseDistX, MouseDistY
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            local MousePosition = UserInputService:GetMouseLocation()
+            MouseDistX = MousePosition.X - frame.AbsolutePosition.X
+            MouseDistY = MousePosition.Y - frame.AbsolutePosition.Y
+        end
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then 
+                dragging = false
+            end
+        end)
+    end)
+
+    coroutine.wrap(function()
+        while true do
+            if dragging then
+                local MousePosition = UserInputService:GetMouseLocation()
+                
+                MakeTween(frame, 0.4, { 
+                    Position = UDim2.new(0, MousePosition.X - MouseDistX, 0, MousePosition.Y - MouseDistY) 
+                }, false)
+            end
+            wait()
+        end
+    end)()
+end)
+
+SpawnCircle = LPH_NO_VIRTUALIZE(function(UI)
+    coroutine.wrap(function()
+        local MousePos = UserInputService:GetMouseLocation()
+        local RelativeX = MousePos.X - UI.AbsolutePosition.X
+        local RelativeY = MousePos.Y - 36 - UI.AbsolutePosition.Y
+
+        local Circle = Instance.new('ImageLabel')
+        local UICorner = Instance.new('UICorner')
+
+        Circle.Parent = UI
+        Circle.BackgroundColor3 = Preset.Colors.White
+        Circle.BackgroundTransparency = 0.5
+        Circle.BorderColor3 = Preset.Colors.Black
+        Circle.BorderSizePixel = 0
+        Circle.Position = UDim2.new(0, RelativeX, 0, RelativeY)
+        Circle.Size = UDim2.new(0, 0, 0, 0)
+        Circle.ZIndex = 10
+        UICorner.CornerRadius = UDim.new(5, 0)
+        UICorner.Parent = Circle
+        
+        MakeTween(Circle, 0.6, {
+            Size = UDim2.new(0, 80, 0, 80),
+            Position = UDim2.new(0, RelativeX - 40, 0, RelativeY - 40),
+            BackgroundTransparency = 1
+        })
+
+        wait(0.6)
+
+        Circle:Destroy()
+    end)()
+end)
+
+Toggle = LPH_NO_VIRTUALIZE(function(UI, Value, Function)
+    local function OnClick()
+        if config[Value] then
+            MakeTween(UI.Switch.Circle, 0.2, {
+                Position = UDim2.new(0, 22, 0, 2)
+            })
+            MakeTween(UI.Switch, 0.2, {
+                BackgroundColor3 = Preset.Colors.Fill
+            })
+        else
+            MakeTween(UI.Switch.Circle, 0.2, {
+                Position = UDim2.new(0, 2, 0, 2)
+            })
+            MakeTween(UI.Switch, 0.2, {
+                BackgroundColor3 = Preset.Colors.Black
+            })
+        end
+
+        if Function then
+            pcall(function()
+                Function(config[Value])
+            end)
+        end
+    end
+
+    UI.Touch:Connect(function()
+        SpawnCircle(UI)
+        config[Value] = not config[Value]
+        OnClick(
+    end)
+    UI.MouseButton1Click:Connect(function()
+        SpawnCircle(UI)
+        config[Value] = not config[Value]
+        OnClick()
+    end)
+    OnClick()
+end)
+
+Button = LPH_NO_VIRTUALIZE(function(UI, Function)
+    UI.Touch:Connect(function()
+        SpawnCircle(UI)
+        pcall(function()
+            Function()
+        end)
+    end)
+    UI.MouseButton1Click:Connect(function()
+        SpawnCircle(UI)
+        pcall(function()
+            Function()
+        end)
+    end)
+end)
+
+Slider = LPH_NO_VIRTUALIZE(function(UI, Value, Min, Max, UsePercentage, Round)
+    local Active = false
+
+    UI.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            Active = true
+
+            MakeTween(UI.Title, 0.4, {
+                Position = UDim2.new(-1, 10, 0, 0)
+            })
+            MakeTween(UI.Slider, 0.4, {
+                Position = UDim2.new(0, 5, 0, 5),
+                Size = UDim2.new(0, 340, 0, 20)
+            })
+            MakeTween(UI.Slider.Value, 0.4, {
+                Size = UDim2.new(0, 340, 0, 20)
+            })
+        end
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then 
+                Active = false
+
+                MakeTween(UI.Title, 0.4, {
+                    Position = UDim2.new(0, 10, 0, 0)
+                })
+                MakeTween(UI.Slider, 0.4, {
+                    Position = UDim2.new(0, 245, 0, 5),
+                    Size = UDim2.new(0, 100, 0, 20)
+                })
+                MakeTween(UI.Slider.Value, 0.4, {
+                    Size = UDim2.new(0, 100, 0, 20)
+                })
+            end
+        end)
+    end)
+
+    coroutine.wrap(function()
+        while true do
+            if Active then
+                local MousePos = UserInputService:GetMouseLocation()
+                local sliderValue = math.clamp((MousePos.X - UI.Slider.AbsolutePosition.X) / UI.Slider.AbsoluteSize.X, 0, 1)
+                local value = math.clamp((MousePos.X - UI.Slider.AbsolutePosition.X) * ((Max - Min) / UI.Slider.AbsoluteSize.X) + Min, Min, Max)
+
+                MakeTween(UI.Slider.Fill, 0.4, {
+                    Size = UDim2.new(sliderValue, 0, 0, 20) 
+                }, false)
+
+                config[Value] = value
+                
+                if not UsePercentage then
+                    UI.Slider.Value.Text = math.round(value / Round) * Round
+                else
+                    UI.Slider.Value.Text = tostring(math.round((sliderValue * 100) / Round) * Round)..'%'
+                end
+            end
+            wait()
+        end
+    end)()
+
+    local MousePos = UserInputService:GetMouseLocation()
+    local sliderValue = math.clamp((config[Value] - Min) / (Max - Min), 0, 1)
+    UI.Slider.Fill.Size = UDim2.new(sliderValue, 0, 0, 20) 
+
+    if not UsePercentage then
+        UI.Slider.Value.Text = math.round(config[Value] / Round) * Round
+    else
+        UI.Slider.Value.Text = tostring(math.round((sliderValue * 100) / Round) * Round)..'%'
+    end
+end)
+
+Keybind = LPH_NO_VIRTUALIZE(function(UI, Value, Function)
+    local ChoosingKey = false
+
+    UserInputService.InputBegan:Connect(function(input, proccesed)
+        if not ChoosingKey then
+            if input.KeyCode.Name == config[Value] then
+                pcall(function()
+                    Function(input)
+                end)
+            end
+        else
+            if string.upper(input.KeyCode.Name) ~= 'UNKNOWN' then
+                config[Value] = input.KeyCode.Name
+                UI.Input.Text = string.upper(input.KeyCode.Name)
+                ChoosingKey = false
+            else
+                ChoosingKey = false
+            end
+        end
+    end)
+
+    UI.Touch:Connect(function()
+        SpawnCircle(UI)
+        ChoosingKey = true
+        UI.Input.Text = ''
+    end)
+
+    UI.MouseButton1Click:Connect(function()
+        SpawnCircle(UI)
+        ChoosingKey = true
+        UI.Input.Text = ''
+    end)
+end)
+
+TabButton = LPH_NO_VIRTUALIZE(function(Button, Position, frame)
+
+    local function isOverObj()
+        local MousePos = UserInputService:GetMouseLocation()
+        MousePos = Vector2.new(MousePos.X, MousePos.Y - 36)
+
+        local top = Button.AbsolutePosition.X
+        local right = Button.AbsolutePosition.Y
+        local bottom = top + Button.AbsoluteSize.X
+        local left = right + Button.AbsoluteSize.Y
+        
+        if MousePos.X >= top and MousePos.Y >= right and MousePos.X <= bottom and MousePos.Y <= left then
+            return true
+        end
+
+        return false
+    end
+
+    Button.MouseButton1Click:Connect(function()
+        game:GetService('TweenService'):Create(
+            UILibrary[frame..'-Tabs'], 
+            TweenInfo.new(0.4, Enum.EasingStyle.Quint), 
+            {
+                CanvasPosition = Vector2.new(Position * 400, 0)
+            }
+        ):Play()
+    end)
+
+    coroutine.wrap(function()
+        while true do
+            if isOverObj(Button) then
+                Button.BackgroundTransparency = 0.7
+            else
+                Button.BackgroundTransparency = 1
+            end
+            wait()
+        end
+    end)()
+end)
+
+TextBox = LPH_NO_VIRTUALIZE(function(UI, Value, Function)
+
+    UI.TextBox.Focused:Connect(function()
+        UI.TextBox.Text = config[Value]
+
+        MakeTween(UI.Title, 0.2, {
+            Position = UDim2.new(-1, 10, 0, 0)
+        })
+        MakeTween(UI.TextBox, 0.2, {
+            Position = UDim2.new(0, 5, 0, 5),
+            Size = UDim2.new(0, 340, 0, 20)
+        })
+    end)
+    UI.TextBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            config[Value] = UI.TextBox.Text
+        else
+            UI.TextBox.Text = config[Value]
+        end
+        if #config[Value] > 5 then
+            UI.TextBox.Text = string.sub(config[Value], 1, 5)..'...'
+        end
+
+        MakeTween(UI.Title, 0.2, {
+            Position = UDim2.new(0, 10, 0, 0)
+        })
+        MakeTween(UI.TextBox, 0.2, {
+            Position = UDim2.new(0, 245, 0, 5),
+            Size = UDim2.new(0, 100, 0, 20)
+        })
+
+        if enterPressed and Function then
+            Function(config[Value])
+        end
+    end)
+    if #config[Value] > 5 then
+        UI.TextBox.Text = string.sub(config[Value], 1, 5)..'...'
+    end
+end)
+
+--ui---------------------------------------
+
+UILibrary.MakeFrame = LPH_JIT_MAX(function(Name, Title)
+
+    local frame = Instance.new('Frame')
+    frame.Parent = ScreenUI
+    frame.Name = Name
+    frame.ZIndex = 0
+    frame.Position = UDim2.new(0.3, 0, 0.2, 0)
+    frame.Size = UDim2.new(0, 400, 0, 300)
+    frame.ClipsDescendants = true
+    draggable(frame)
+    UILibrary[Name] = frame
+
+   
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 15)
+    UICorner.Parent = frame
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.Parent = frame
+    title.Size = UDim2.new(0, 400, 0, 50)
+    title.BackgroundTransparency = 1
+    title.FontFace = Preset.Fonts.Text
+    title.Text = Title
+    title.TextSize = 50
+    title.ZIndex = 1
+    title.TextColor3 = Preset.Colors.White
+
+    local Tabs = Instance.new('ScrollingFrame')
+    Tabs.Name = 'Tabs'
+    Tabs.Parent = frame
+    Tabs.BackgroundTransparency = 1
+    Tabs.CanvasSize = UDim2.new(1, 0, 0, 0)
+    Tabs.AutomaticCanvasSize = 'X'
+    Tabs.ScrollingEnabled = false
+    Tabs.ScrollBarThickness = 0
+    Tabs.ZIndex = 0
+    Tabs.Size = UDim2.new(0, 400, 0, 212)
+    Tabs.Position = UDim2.new(0, 0, 0, 88)
+    UILibrary[Name..'-Tabs'] = Tabs
+
+    local Buttons = Instance.new('ScrollingFrame')
+    Buttons.Name = 'Buttons'
+    Buttons.Parent = frame
+    Buttons.BackgroundTransparency = 1
+    Buttons.CanvasSize = UDim2.new(1, 0, 0, 0)
+    Buttons.AutomaticCanvasSize = 'X'
+    Buttons.ScrollBarThickness = 0
+    Buttons.ZIndex = 0
+    Buttons.Size = UDim2.new(0, 400, 0, 30)
+    Buttons.Position = UDim2.new(0, 0, 0, 50)
+    UILibrary[Name..'-Buttons'] = Buttons
+
+    local gap = Instance.new('Frame')
+    gap.Name = 'Gap'
+    gap.Parent = Buttons
+    gap.LayoutOrder = -1
+    gap.Size = UDim2.new(0, 0, 0, 0)
+
+    local gap1 = Instance.new('Frame')
+    gap1.Name = 'Gap'
+    gap1.Parent = Buttons
+    gap1.LayoutOrder = 1
+    gap1.Size = UDim2.new(0, 0, 0, 0)
+
+    local UIList = Instance.new('UIListLayout')
+    UIList.Parent = Buttons
+    UIList.FillDirection = Enum.FillDirection.Horizontal
+    UIList.SortOrder = Enum.SortOrder.LayoutOrder
+    UIList.Padding = UDim.new(0, 5)
+    UIList.VerticalAlignment = Enum.VerticalAlignment.Center
+
+    local UIList1 = Instance.new('UIListLayout')
+    UIList1.Parent = Tabs
+    UIList1.FillDirection = Enum.FillDirection.Horizontal
+    UIList1.SortOrder = Enum.SortOrder.LayoutOrder
+    UIList1.Padding = UDim.new(0, 0)
+end)
+
+UILibrary.AddTab = LPH_JIT_MAX(function(Name, Text, Frame)
+
+    local button = Instance.new('TextButton')
+    button.Name = Name
+    button.Parent = UILibrary[Frame..'-Buttons']
+    button.Active = true
+    button.ZIndex = 1
+    button.BackgroundColor3 = Preset.Colors.Black
+    button.Size = UDim2.new(0, 80, 0, 25)
+    button.FontFace = Preset.Fonts.Text
+    button.Text = Text
+    button.TextColor3 = Preset.Colors.White
+    button.TextSize = 15
+    TabButton(button, #UILibrary[Frame..'-Buttons']:GetChildren() - 4, Frame)
+    UILibrary[Name..'-Button'] = button
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 10)
+    UICorner.Parent = button
+
+    local tab = Instance.new('ScrollingFrame')
+    tab.Name = Name
+    tab.Parent = UILibrary[Frame..'-Tabs']
+    tab.Active = true
+    tab.ZIndex = 1
+    tab.BackgroundTransparency = 1
+    tab.Size = UDim2.new(0, 400, 0, 212)
+    tab.AutomaticCanvasSize = 'Y'
+    tab.CanvasSize = UDim2.new(0, 0, 1, 0)
+    tab.ScrollBarThickness = 0
+    UILibrary[Name..'-Tab'] = tab
+
+    local UIList = Instance.new('UIListLayout')
+    UIList.Parent = tab
+    UIList.FillDirection = Enum.FillDirection.Vertical
+    UIList.SortOrder = Enum.SortOrder.LayoutOrder
+    UIList.Padding = UDim.new(0, 5)
+    UIList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    local gap = Instance.new('Frame')
+    gap.Name = 'Gap'
+    gap.Parent = tab
+    gap.LayoutOrder = 1
+    gap.Size = UDim2.new(0, 0, 0, 0)
+end)
+
+UILibrary.AddSection = LPH_JIT_MAX(function(Name, Title, Tab)
+
+    local section = Instance.new('Frame')
+    section.Name = Name
+    section.Parent = UILibrary[Tab..'-Tab']
+    section.ZIndex = 2
+    section.Size = UDim2.new(0, 380, 0, 35)
+    section.BackgroundColor3 = Preset.Colors.Black
+    section.BackgroundTransparency = 0.8
+    UILibrary[Name] = section
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 10)
+    UICorner.Parent = section
+
+    local UIList = Instance.new('UIListLayout')
+    UIList.Parent = section
+    UIList.FillDirection = Enum.FillDirection.Vertical
+    UIList.SortOrder = Enum.SortOrder.LayoutOrder
+    UIList.Padding = UDim.new(0, 5)
+    UIList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.Parent = section
+    title.ZIndex = 3
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 380, 0, 30)
+    title.TextColor3 = Preset.Colors.White
+    title.Text = Title
+    title.FontFace = Preset.Fonts.Text
+    title.TextSize = 20
+end)
+
+UILibrary.AddToggle = LPH_JIT_MAX(function(Name, Text, Section, Value, Default, Function)
+
+    UILibrary[Section].Size = UDim2.new(0, 380, 0, UILibrary[Section].Size.Y.Offset + 35)
+
+    if config[Value] == nil then
+        config[Value] = Default
+    end
+
+    local toggle = Instance.new('ImageButton')
+    toggle.Name = Name
+    toggle.Parent = UILibrary[Section]
+    toggle.ZIndex = 3
+    toggle.Size = UDim2.new(0, 350, 0, 30)
+    toggle.BackgroundColor3 = Preset.Colors.Gray
+    toggle.BackgroundTransparency = 0.8
+    toggle.ClipsDescendants = true
+    UILibrary[Name] = toggle
+    Toggles[Name] = {toggle, Value, Function}
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 5)
+    UICorner.Parent = toggle
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.Parent = toggle
+    title.Text = Text
+    title.ZIndex = 4
+    title.FontFace = Preset.Fonts.Text
+    title.TextColor3 = Preset.Colors.White
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 200, 0, 30)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local switch = Instance.new('ImageLabel')
+    switch.Name = 'Switch'
+    switch.Parent = toggle
+    switch.ZIndex = 4
+    switch.BackgroundColor3 = Preset.Colors.Fill
+    switch.Position = UDim2.new(0, 300, 0, 5)
+    switch.Size = UDim2.new(0, 40, 0, 20)
+
+    local UICorner1 = Instance.new('UICorner')
+    UICorner1.CornerRadius = UDim.new(0, 10)
+    UICorner1.Parent = switch
+
+    local circle = Instance.new('ImageLabel')
+    circle.Name = 'Circle'
+    circle.Parent = switch
+    circle.ZIndex = 5
+    circle.BackgroundColor3 = Preset.Colors.White
+    circle.Position = UDim2.new(0, 22, 0, 2)
+    circle.Size = UDim2.new(0, 16, 0, 16)
+
+    local UICorner1 = Instance.new('UICorner')
+    UICorner1.CornerRadius = UDim.new(1, 0)
+    UICorner1.Parent = circle
+
+    Toggle(toggle, Value, Function)
+end)
+
+UILibrary.AddButton = LPH_JIT_MAX(function(Name, Text, Section, Function)
+
+    UILibrary[Section].Size = UDim2.new(0, 380, 0, UILibrary[Section].Size.Y.Offset + 35)
+
+    local button = Instance.new('ImageButton')
+    button.Name = Name
+    button.ZIndex = 3
+    button.Parent = UILibrary[Section]
+    button.Size = UDim2.new(0, 350, 0, 30)
+    button.BackgroundColor3 = Preset.Colors.Gray
+    button.BackgroundTransparency = 0.8
+    button.ClipsDescendants = true
+    UILibrary[Name] = button
+    Buttons[Name] = {button, Function}
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 5)
+    UICorner.Parent = button
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.Parent = button
+    title.Text = Text
+    title.ZIndex = 4
+    title.FontFace = Preset.Fonts.Text
+    title.TextColor3 = Preset.Colors.White
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 200, 0, 30)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local icon = Instance.new('ImageLabel')
+    icon.Name = 'Icon'
+    icon.Parent = button
+    icon.ZIndex = 4
+    icon.BackgroundTransparency = 1
+    icon.Image = Preset.Images.Button
+    icon.Position = UDim2.new(0, 310, 0, 2)
+    icon.Size = UDim2.new(0, 26, 0, 26)
+
+    Button(button, Function)
+end)
+
+UILibrary.AddLabel = LPH_JIT_MAX(function(Name, Text, Section)
+
+    UILibrary[Section].Size = UDim2.new(0, 380, 0, UILibrary[Section].Size.Y.Offset + 35)
+
+    local label = Instance.new('ImageLabel')
+    label.Name = Name
+    label.ZIndex = 3
+    label.Parent = UILibrary[Section]
+    label.Size = UDim2.new(0, 350, 0, 30)
+    label.BackgroundColor3 = Preset.Colors.Gray
+    label.BackgroundTransparency = 0.8
+    label.ClipsDescendants = true
+    UILibrary[Name] = label
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 5)
+    UICorner.Parent = label
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.Parent = label
+    title.Text = Text
+    title.ZIndex = 4
+    title.FontFace = Preset.Fonts.Text
+    title.TextColor3 = Preset.Colors.White
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 200, 0, 30)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+end)
+
+UILibrary.AddSlider = LPH_JIT_MAX(function(Name, Text, Section, Value, Default, Min, Max, UsePercentage, Round)
+
+    UILibrary[Section].Size = UDim2.new(0, 380, 0, UILibrary[Section].Size.Y.Offset + 35)
+
+    if not config[Value] then
+        config[Value] = Default
+    end
+
+    local slider = Instance.new('ImageButton')
+    slider.Name = Name
+    slider.Parent = UILibrary[Section]
+    slider.ZIndex = 3
+    slider.Size = UDim2.new(0, 350, 0, 30)
+    slider.BackgroundColor3 = Preset.Colors.Gray
+    slider.BackgroundTransparency = 0.8
+    slider.ClipsDescendants = true
+    UILibrary[Name] = slider
+    Sliders[Name] = {slider, Value, Max, UsePercentage, Round}
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 5)
+    UICorner.Parent = slider
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.ZIndex = 4
+    title.Parent = slider
+    title.Text = Text
+    title.FontFace = Preset.Fonts.Text
+    title.TextColor3 = Preset.Colors.White
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 200, 0, 30)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local slider1 = Instance.new('ImageLabel')
+    slider1.Name = 'Slider'
+    slider1.Parent = slider
+    slider1.ZIndex = 4
+    slider1.Size = UDim2.new(0, 100, 0, 20)
+    slider1.Position = UDim2.new(0, 245, 0, 5)
+    slider1.BackgroundColor3 = Preset.Colors.Black
+
+    local UICorner1 = Instance.new('UICorner')
+    UICorner1.CornerRadius = UDim.new(0, 5)
+    UICorner1.Parent = slider1
+
+    local SliderFill = Instance.new('ImageLabel')
+    SliderFill.Parent = slider1
+    SliderFill.Name = 'Fill'
+    SliderFill.ZIndex = 5
+    SliderFill.Size = UDim2.new(1, 0, 0, 20)
+    SliderFill.Position = UDim2.new(0, 0, 0, 0)
+    SliderFill.BackgroundColor3 = Preset.Colors.Fill
+    
+    local UICorner2 = Instance.new('UICorner')
+    UICorner2.CornerRadius = UDim.new(0, 5)
+    UICorner2.Parent = SliderFill
+
+    local value = Instance.new('TextLabel')
+    value.Name = 'Value'
+    value.Parent = slider1
+    value.ZIndex = 6
+    value.Text = ''
+    value.FontFace = Preset.Fonts.Text
+    value.TextColor3 = Preset.Colors.White
+    value.TextSize = 15
+    value.BackgroundTransparency = 1
+    value.Size = UDim2.new(0, 100, 0, 20)
+
+    Slider(slider, Value, Min, Max, UsePercentage, Round)
+end)
+
+UILibrary.AddKeyBind = LPH_JIT_MAX(function(Name, Text, Section, Default, Function)
+
+    UILibrary[Section].Size = UDim2.new(0, 380, 0, UILibrary[Section].Size.Y.Offset + 35)
+
+    if not config[Name..'-Key'] then
+        config[Name..'-Key'] = Default
+    end
+
+    local KeyBind = Instance.new('ImageButton')
+    KeyBind.Name = Name
+    KeyBind.Parent = UILibrary[Section]
+    KeyBind.ZIndex = 3
+    KeyBind.Size = UDim2.new(0, 350, 0, 30)
+    KeyBind.BackgroundColor3 = Preset.Colors.Gray
+    KeyBind.BackgroundTransparency = 0.8
+    KeyBind.ClipsDescendants = true
+    UILibrary[Name] = KeyBind
+    KeyBinds[Name] = {KeyBind,  Name..'-Key'}
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 5)
+    UICorner.Parent = KeyBind
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.ZIndex = 4
+    title.Parent = KeyBind
+    title.Text = Text
+    title.FontFace = Preset.Fonts.Text
+    title.TextColor3 = Preset.Colors.White
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 200, 0, 30)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local input = Instance.new('TextLabel')
+    input.Name = 'Input'
+    input.ZIndex = 4
+    input.Parent = KeyBind
+    input.Size = UDim2.new(0, 100, 0, 20)
+    input.Position = UDim2.new(0, 245, 0, 5)
+    input.BackgroundColor3 = Preset.Colors.Black
+    input.BackgroundTransparency = 0.7
+    input.Text = string.upper(config[Name..'-Key'])
+    input.FontFace = Preset.Fonts.Text
+    input.TextColor3 = Preset.Colors.White
+    input.TextSize = 15
+
+    local UICorner1 = Instance.new('UICorner')
+    UICorner1.CornerRadius = UDim.new(0, 5)
+    UICorner1.Parent = input
+
+    Keybind(KeyBind, Name..'-Key', Function)
+end)
+
+UILibrary.AddTextBox = LPH_JIT_MAX(function(Name, Text, Section, Value, Default, Function)
+    
+    UILibrary[Section].Size = UDim2.new(0, 380, 0, UILibrary[Section].Size.Y.Offset + 35)
+
+    if not config[Value] then
+        config[Value] = Default
+    end
+
+    local textBox = Instance.new('ImageLabel')
+    textBox.Name = Name
+    textBox.Parent = UILibrary[Section]
+    textBox.ZIndex = 3
+    textBox.Size = UDim2.new(0, 350, 0, 30)
+    textBox.BackgroundColor3 = Preset.Colors.Gray
+    textBox.BackgroundTransparency = 0.8
+    textBox.ClipsDescendants = true
+    UILibrary[Name] = textBox
+    TextBoxes[Name] = {textBox, Value}
+
+    local UICorner = Instance.new('UICorner')
+    UICorner.CornerRadius = UDim.new(0, 5)
+    UICorner.Parent = textBox
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.ZIndex = 4
+    title.Parent = textBox
+    title.Text = Text
+    title.FontFace = Preset.Fonts.Text
+    title.TextColor3 = Preset.Colors.White
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 200, 0, 30)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local input = Instance.new('TextBox')
+    input.Parent = textBox
+    input.ZIndex = 4
+    input.Name = 'TextBox'
+    input.Size = UDim2.new(0, 100, 0, 20)
+    input.Position = UDim2.new(0, 245, 0, 5)
+    input.BackgroundColor3 = Preset.Colors.White
+    input.BackgroundTransparency = 0.7
+    input.FontFace = Preset.Fonts.Text
+    input.TextColor3 = Preset.Colors.White
+    input.TextSize = 15
+    input.Text = config[Value]
+
+    local UICorner1 = Instance.new('UICorner')
+    UICorner1.CornerRadius = UDim.new(0, 5)
+    UICorner1.Parent = input
+
+    TextBox(textBox, Value, Function)
+end)
+
+UILibrary.UpdateTextBoxText = LPH_JIT_MAX(function(Name, Text)
+    local UI = UILibrary['Name']
+    
+    if not UI.TextBox.Focused then
+        if #Text > 5 then
+            UI.TextBox.Text = string.sub(Text, 1, 5)..'...'
+        else
+            UI.TextBox.Text = Text
+        end
+    else
+        UI.TextBox.Text = Text
+    end
+end)
+
+UILibrary.UpdateUI =  LPH_NO_VIRTUALIZE(function()
+    for _, data in pairs(Toggles) do
+        UI = data[1]
+        Value = data[2]
+        Function = data[3]
+
+        if config[Value] then
+            MakeTween(UI.Switch.Circle, 0.2, {
+                Position = UDim2.new(0, 22, 0, 2)
+            })
+            MakeTween(UI.Switch, 0.2, {
+                BackgroundColor3 = Preset.Colors.Fill
+            })
+        else
+            MakeTween(UI.Switch.Circle, 0.2, {
+                Position = UDim2.new(0, 2, 0, 2)
+            })
+            MakeTween(UI.Switch, 0.2, {
+                BackgroundColor3 = Preset.Colors.Black
+            })
+        end
+
+        if Function then
+            pcall(function()
+                Function(config[Value])
+            end)
+        end
+    end
+    for _, data in pairs(Buttons) do
+        
+        UI = data[1]
+        Function = data[2]
+
+        pcall(function()
+            Function()
+        end)
+    end
+
+    for _, data in pairs(Sliders) do
+        local UI = data[1]
+        local Value = data[2]
+        local Max = data[3]
+        local UsePercentage = data[4]
+        local Round = data[5]
+
+        local MousePos = UserInputService:GetMouseLocation()
+        local sliderValue = math.clamp((config[Value] - Min) / (Max - Min), 0, 1)
+        UI.Slider.Fill.Size = UDim2.new(sliderValue, 0, 0, 20) 
+
+        if not UsePercentage then
+            UI.Slider.Value.Text = math.round(config[Value] / Round) * Round
+        else
+            UI.Slider.Value.Text = tostring(math.round((sliderValue * 100) / Round) * Round)..'%'
+        end
+    end
+
+    for _, data in pairs(KeyBinds) do
+        local UI = data[1]
+        local Value = data[2]
+
+        UI.Input.Text = string.upper(config[Value])
+    end
+    for _, data in pairs(TextBoxes) do
+        local UI = data[1]
+        local Value = data[2]
+
+        if #config[Value] > 5 then
+            UI.TextBox.Text = string.sub(config[Value], 1, 5)..'...'
+        end
+    end
+end)
+
+return UILibrary, Preset
